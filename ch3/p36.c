@@ -4,7 +4,7 @@
  * @LastEditors: lxy
  * @LastEditTime: 2021-01-22 13:53:43
  */
-#include <apue.h>
+#include <stdio.h>
 #include <error.h>
 #include <stdio.h>
 #include <fcntl.h>
