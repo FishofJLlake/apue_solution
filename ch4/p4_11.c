@@ -106,8 +106,11 @@ dopath(Myfunc* func)
 		if ((fullpath = realloc(fullpath, pathlen)) == NULL)
 			err_sys("realloc failed");
 	}
-	fullpath[n++] = '/';
-	fullpath[n] = 0;
+	// fullpath[n++] = '/';
+	// fullpath[n] = 0;
+
+	if ((dp = opendir(fullpath)) == NULL)	/* can't read directory */    
+		return(func(fullpath, &statbuf, FTW_DNR));     
 
   /* gedit current work directory */
   if(chdir(fullpath) < 0)
@@ -115,23 +118,20 @@ dopath(Myfunc* func)
     perror("chdir error");
   }
   
-	if ((dp = opendir("./")) == NULL)	/* can't read directory */
-		return(func(fullpath, &statbuf, FTW_DNR));
-
 	while ((dirp = readdir(dp)) != NULL) {
 		if (strcmp(dirp->d_name, ".") == 0  ||
 		    strcmp(dirp->d_name, "..") == 0)
 				continue;		/* ignore dot and dot-dot */
-		strcpy(&fullpath[n], dirp->d_name);	/* append name after "/" */
+		strcpy(fullpath, dirp->d_name);	/* append name after "/" */ //gedit
 		if ((ret = dopath(func)) != 0)		/* recursive */
 			break;	/* time to leave */
 	}
-	fullpath[n-1] = 0;	/* erase everything from slash onward */
+	// fullpath[n-1] = 0;	/* erase everything from slash onward */
 
 	if (closedir(dp) < 0)
 		err_ret("can't close directory %s", fullpath);
 
-  if(chdir("/..") < 0)
+  if(chdir("..") < 0)
   {
     fprintf(stderr, "chdir to .. error!\n");
   }

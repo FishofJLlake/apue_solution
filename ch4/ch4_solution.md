@@ -299,7 +299,7 @@ int main(void)
 #### p4.7 在4.12节ls命令的输出中,core和core.copy的访问权限不同,如果创建两个文件时umask没有变,说明为什么会发生这种差别。
 
 在ubuntu下， du命令报告的是1024字节块的块数，并且其字节数为4096字节的整数倍（因为磁盘上的数据块设置为4096）。
-当创建新的core文件时,内核对其访问权限有一个默认设置,在本例中为rw-r--r--。shell对创建的重定向的新文件也有一个默认的访问权限,本例中为rw-rw-rw-,这个值总是被当前的umask修改,在本例中umask为02。
+当创建新的core文件时(程序运行过程中异常终止或崩溃，操作系统会将程序当时的内存状态记录下来，保存在core dump文件中，一般命名为core),内核对其访问权限有一个默认设置,在本例中为rw-r--r--。shell对创建的重定向的新文件也有一个默认的访问权限,本例中为rw-rw-rw-,这个值总是被当前的umask修改,在本例中umask为02。
 
 #### p4.8 在运行图 4-16 的程序时,使用了 df(1)命令来检查空闲的磁盘空间。为什么不使用 du(1)命令?
 
@@ -317,3 +317,91 @@ unlink函数会进行目录项删除及链接数计数减1, 这里不区分是�
 
 代码见p4_11.c代码，运行后发现其运行时间并没有明显的变化，具体原因待分析。
 <font color=red>TODO</font> #1
+
+#### p4.12 每个进程都有一个根目录用于解析绝对路径名,可以通过 chroot 函数改变根目录。在手册中查阅此函数。说明这个函数什么时候有用。
+
+chroot函数被因特网文件传输协议(Internet File Transfer Protocol,FTP)程序用于辅助安全性。系统中没有账户的用户(也称为匿名 FTP)放在一个单独的目录下,利用 chroot将此目录当作新的根目录,就可以阻止用户访问此目录以外的文件。
+chroot也用于在另一台机器上构造一个文件系统层次结构的副本,然后修改此副本,不会更改原来的文件系统。这可用于测试新软件包的安装。
+chroot只能由超级用户执行,一旦更改了一个进程的根,该进程及其后代进程就再也不能恢复至原先的根。
+
+#### p4.13 如何只设置两个时间值中的一个来使用utimes函数?
+
+代码见下。utime函数使用时出现问题，使用utimensat函数代替，待解决。
+```c
+#include <sys/stat.h>
+#include <stdlib.h>		/* for convenience */
+#include <stdio.h>		/* for convenience */
+#include <unistd.h>		/* for convenience */
+#include <fcntl.h>
+#include <sys/time.h>
+#include <sys/types.h>
+#include <utime.h>
+
+int main(int argc, char *argv[])
+{
+  struct stat statbuf;
+  if (lstat(argv[1], &statbuf) < 0)	/* stat error */
+  {
+    perror("can not stat");
+  }
+  
+  printf("访问时间： %ld\n", statbuf.st_atim.tv_sec);
+  printf("修改时间： %ld\n", statbuf.st_mtime);
+
+  /*********** TODO #2 **************/
+  struct timeval atimes[2];
+  atimes[0].tv_sec = statbuf.st_atime;
+  //atimes[0].tv_usec = 330009451;
+
+  atimes[1].tv_sec = statbuf.st_mtime;
+  //atimes[1].tv_usec = 330009451;
+  
+  if(utimes(argv[1], &atimes) < 0)
+  {
+    perror("get utimes error");
+  }
+
+  struct stat statbuf1;
+  if (lstat(argv[1], &statbuf1) < 0)	/* stat error */
+  {
+    perror("can not stat");
+  }
+
+  printf("use utimes 访问时间： %ld\n", statbuf1.st_atime);
+  printf("use utimes 修改时间： %ld\n", statbuf1.st_mtime);
+
+  /**********************************/
+
+  struct timespec times[2];
+
+  times[0].tv_sec = 1612494030;
+  times[0].tv_nsec = UTIME_OMIT;    //keep the current value unchanged
+  times[1].tv_sec = 1612494045;
+  times[1].tv_nsec = 330009451;
+  if (utimensat(AT_FDCWD, argv[1], times, 0) < 0)		/* reset times */
+    perror("futimens error");
+
+  // close(fd);
+
+  struct stat statbuf2;
+  if (lstat(argv[1], &statbuf2) < 0)	/* stat error */
+  {
+    perror("can not stat");
+  }
+
+  printf("use utimensat 访问时间： %ld\n", statbuf2.st_atime);
+  printf("use utimensat 修改时间： %ld\n", statbuf2.st_mtime);
+
+
+  exit(0);
+}
+```
+#### p4.14 有些版本的finger(1)命令输出“New mail received ...”和“unread since ...”,其中...表示相应的日期和时间。程序是如何决定这些日期和时间的?
+
+finger(1)对邮箱调用stat函数,最近一次的修改时间是上一次接收邮件的时间,最近访问时间是上一次读邮件的时间。
+
+#### p4.15 用cpio(1)和tar(1)命令检查档案文件的格式(请参阅《UNIX程序员手册》第5部分中的说明)。3 个可能的时间值中哪几个是为每一个文件保存的?你认为文件复原时,文件的访问时间是什么?为什么?
+
+cpio和tar存储的只是归档文件的修改时间(st_mtim)。因为文件归档时一定会读它,所以该文件的访问时间对应于创建归档文件的时间,因此没有存储其访问时间。cpio的-a选项可以在读输入文件后重新设置该文件的访问时间,于是创建归档文件不改变文件的访问时间。(但是,重置文件的访问时间确实改变了状态更改时间。)状态更改时间没有存储在文挡上,因为即使它曾被归档,在抽取时也不能设置其值。(utimes 函数极其相关的futimens和utimensta函数可以更改的仅仅是访问时间和修改时间。)对tar来说,在抽取文件时,其默认方式是复原归档时的修改时间值,但是tar的-m选项则将修改时间设置为抽取文件时的时间,而不是复原归档时的修改时间值。对于tar,无论何种情况,在抽取后,文件的访问时间均是抽取文件时的时间。另一方面,cpio将访问时间和修改时间设置为抽取文件时的时间。默认情况下,它并不试图将修改时间设置为归档时的值。cpio 的-m 选项将文件的修改时间和访问时间设置为归档时的值。
+
+#### p4.16 UNIX系统对目录树的深度有限制吗?编写一个程序循环,在每次循环中,创建目录,并将该目录更改为工作目录。确保叶节点的绝对路径名的长度大于系统的 PATH_MAX 限制。可以调用getcwd得到目录的路径名吗?标准UNIX系统工具是如何处理长路径名的?对目录可以使用tar或cpio命令归档吗?
