@@ -1,70 +1,46 @@
-#include<dirent.h>
-#include<fcntl.h>
+
 #include <sys/stat.h>
 #include <stdlib.h>		/* for convenience */
 #include <stdio.h>		/* for convenience */
 #include <unistd.h>		/* for convenience */
 #include <fcntl.h>
 #include <sys/types.h>
-#include <stddef.h>
 #include <string.h>
 
-#define NAME "./alonglonglonglonglonglonglonglongname"
-#define TRUE 1
-int main(){
+/*
+ * Default file access permissions for new files.
+ */
+#define	FILE_MODE	(S_IRUSR | S_IWUSR | S_IRGRP | S_IROTH)
 
-	//用来获取当前目录名
-	DIR *dir;
-	struct dirent *dr;
+/*
+ * Default permissions for new directories.
+ */
+#define	DIR_MODE	(FILE_MODE | S_IXUSR | S_IXGRP | S_IXOTH)
 
-	int i=0;
-	
-	if(chdir("/home/lxy")<0)
-		perror("chdir /home/lxy error");
+int main(int argc, char *argv[])
+{
+    const char* dirname = "mydir";
 
-	while(TRUE){
-		
-		printf("level: %d\n", i);
-		
-		//创建目录
-		if(mkdir(NAME, 0775)!=0)
-			perror("mkdir error");
-		
-		if(chdir(NAME)<0)
-			perror("chdir error");
-
-		if((dir=opendir("."))==NULL)
-			perror("opendir error");
-		
-		if((dr=readdir(dir))==NULL)
-			perror("readdir error");
-
-		char *dirName;
-    strcpy(dirName, dr->d_name);
-		if(strlen(dirName) > pathconf("/", _PC_PATH_MAX))
-				break;
-		
-		if(closedir(dir)<0)
-			perror("closedir error");
-
-		i++;
-	}
-
-	// //尝试获得目录的路径名
-	// long size=pathconf("/", _PC_PATH_MAX);
-	// char *buf=(char *)malloc(size+1);//加上终止null字符
-	// char *path_name;
-
-	// while(TRUE){
-	// 	if((path_name=getcwd(buf,size)) > 0)
-	// 		break;
-	// 	else{
-	// 		perror("get cwd failed");
-	// 		size+=100;
-	// 		if((buf=(char *)realloc(buf,size))==NULL)
-	// 			perror("realloc error");	
-	// 	}
-	// }
-	// printf("length= %ld, %ld\n",strlen(buf), buf);
-	exit(0);
+    long pathmax = pathconf(".", _PC_PATH_MAX);
+    printf("pathmax: %ld\n", pathmax);
+    char path[pathmax];
+    long curr_len;
+    // We keep looping until we exceed pathmax.
+    
+    while ((curr_len = strlen(getcwd(path, pathmax))) < pathmax)  //length include '/'
+    { 
+        // DIR_MODE is defined in apue.h
+        // Note, mkdir returns 0 on success, not the fd of the dir.
+        if (mkdir(dirname, DIR_MODE) < 0) {
+            perror("mkdir error, did you make sure mydir didn't exist before running");
+            return -1;
+        }
+        if(chdir(dirname) < 0)
+        {
+          perror("can not chdir");
+        }
+        printf("Current absolute path length: %ld\n", curr_len);
+    }
+    
+    return 0;
 }

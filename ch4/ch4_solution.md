@@ -405,3 +405,62 @@ finger(1)对邮箱调用stat函数,最近一次的修改时间是上一次接收
 cpio和tar存储的只是归档文件的修改时间(st_mtim)。因为文件归档时一定会读它,所以该文件的访问时间对应于创建归档文件的时间,因此没有存储其访问时间。cpio的-a选项可以在读输入文件后重新设置该文件的访问时间,于是创建归档文件不改变文件的访问时间。(但是,重置文件的访问时间确实改变了状态更改时间。)状态更改时间没有存储在文挡上,因为即使它曾被归档,在抽取时也不能设置其值。(utimes 函数极其相关的futimens和utimensta函数可以更改的仅仅是访问时间和修改时间。)对tar来说,在抽取文件时,其默认方式是复原归档时的修改时间值,但是tar的-m选项则将修改时间设置为抽取文件时的时间,而不是复原归档时的修改时间值。对于tar,无论何种情况,在抽取后,文件的访问时间均是抽取文件时的时间。另一方面,cpio将访问时间和修改时间设置为抽取文件时的时间。默认情况下,它并不试图将修改时间设置为归档时的值。cpio 的-m 选项将文件的修改时间和访问时间设置为归档时的值。
 
 #### p4.16 UNIX系统对目录树的深度有限制吗?编写一个程序循环,在每次循环中,创建目录,并将该目录更改为工作目录。确保叶节点的绝对路径名的长度大于系统的 PATH_MAX 限制。可以调用getcwd得到目录的路径名吗?标准UNIX系统工具是如何处理长路径名的?对目录可以使用tar或cpio命令归档吗?
+
+代码如下:
+```c
+#include <sys/stat.h>
+#include <stdlib.h>		/* for convenience */
+#include <stdio.h>		/* for convenience */
+#include <unistd.h>		/* for convenience */
+#include <fcntl.h>
+#include <sys/types.h>
+#include <string.h>
+
+/*
+ * Default file access permissions for new files.
+ */
+#define	FILE_MODE	(S_IRUSR | S_IWUSR | S_IRGRP | S_IROTH)
+
+/*
+ * Default permissions for new directories.
+ */
+#define	DIR_MODE	(FILE_MODE | S_IXUSR | S_IXGRP | S_IXOTH)
+
+int main(int argc, char *argv[])
+{
+    const char* dirname = "mydir";
+
+    long pathmax = pathconf(".", _PC_PATH_MAX);
+    printf("pathmax: %ld\n", pathmax);
+    char path[pathmax];
+    long curr_len;
+    // We keep looping until we exceed pathmax.
+    while ((curr_len = strlen(getcwd(path, pathmax))) < pathmax) {
+        // DIR_MODE is defined in apue.h
+        // Note, mkdir returns 0 on success, not the fd of the dir.
+        if (mkdir(dirname, DIR_MODE) < 0) {
+            perror("mkdir error, did you make sure mydir didn't exist before running");
+            return -1;
+        }
+        if(chdir(dirname) < 0)
+        {
+          perror("can not chdir");
+        }
+        printf("Current absolute path length: %ld\n", curr_len);
+    }
+    
+    return 0;
+}
+```
+
+当路径名超过最大限制时，getcwd可以获得路径名,但是需要多次调用realloc得到一个足够大的缓冲区。本linux程序会引发段错误，可以参考官方答案。tar可以对目录进行压缩，但是对压缩文件无法进行解压。
+
+#### p4.17 3.16 节中描述了/dev/fd 特征。如果每个用户都可以访问这些文件,则其访问权限必须为rw-rw-rw-。有些程序创建输出文件时,先删除该文件以确保该文件名不存在,忽略返回码。
+```c
+  unlink (path);
+  if ( (fd = creat(path, FILE_MODE)) < 0)
+    err_sys(...);
+```
+如果path是/dev/fd/1,会出现什么情况?
+
+/dev目录关闭了一般用户的写访问权限，以防止普通用户删除目录中的文件名。这就意味着unlink失败。
