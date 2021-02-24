@@ -4,6 +4,10 @@
     "unistd.h": "c",
     "utime.h": "c",
     "dirent.h": "c",
-    "string.h": "c"
+    "string.h": "c",
+    "cstdlib": "c",
+    "utsname.h": "c",
+    "time.h": "c",
+    "typeinfo": "c"
   }
 }
